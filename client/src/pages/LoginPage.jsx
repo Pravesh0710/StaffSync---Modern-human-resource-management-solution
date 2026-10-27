@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layers, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
 
@@ -162,6 +162,14 @@ const LoginPage = () => {
             </button>
           </div>
         </div>
+
+        {/* Sign up link */}
+        <p className="text-center text-muted small mt-4 mb-0">
+          New to StaffSync?{' '}
+          <Link to="/signup" className="text-primary fw-semibold text-decoration-none">
+            Create an account
+          </Link>
+        </p>
       </div>
     </div>
   );

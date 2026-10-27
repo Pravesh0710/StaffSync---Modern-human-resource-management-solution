@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 
 // Pages
 import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 
 // HR Pages
 import HRDashboard from './pages/hr/HRDashboard';
@@ -70,6 +71,7 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
 
           {/* Root Redirect */}
           <Route path="/" element={<RootRedirect />} />
