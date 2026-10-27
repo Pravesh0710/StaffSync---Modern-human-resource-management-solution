@@ -44,6 +44,17 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
+// Root info endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'StaffSync HRM REST API',
+    status: 'Running',
+    version: '1.0.0',
+    healthCheck: '/api/health',
+    frontendUrl: process.env.CLIENT_URL || 'http://localhost:5173'
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({

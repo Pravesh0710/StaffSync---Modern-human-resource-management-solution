@@ -194,8 +194,8 @@ exports.createEmployee = async (req, res, next) => {
 
 /**
  * @route   PUT /api/employees/:id
- * @desc    Update employee details
- * @access  Private (HR full update, Employee updates permitted personal fields)
+ * @desc    Update employee details. HR can also change the linked user email.
+ * @access  Private (HR full update, Employee/Manager updates permitted personal fields only)
  */
 exports.updateEmployee = async (req, res, next) => {
   try {
@@ -208,42 +208,61 @@ exports.updateEmployee = async (req, res, next) => {
     }
 
     if (req.user.role === 'HR') {
-      // HR has full update rights
+      // ── HR: full update rights ───────────────────────────────────────────
+
+      // If an email change is requested, validate uniqueness first
+      if (req.body.email) {
+        const newEmail = req.body.email.toLowerCase().trim();
+        const existingUser = await User.findOne({ email: newEmail });
+        if (existingUser && String(existingUser._id) !== String(employee.userId)) {
+          return res.status(409).json({
+            success: false,
+            message: 'A user account with this email already exists'
+          });
+        }
+      }
+
+      // Update Employee fields
       const allowedFields = [
         'firstName', 'lastName', 'department', 'jobTitle',
         'managerId', 'phone', 'dateOfJoining', 'address',
         'emergencyContact', 'isActive'
       ];
-
       allowedFields.forEach(field => {
         if (req.body[field] !== undefined) {
           employee[field] = req.body[field];
         }
       });
-
-      // Update linked user name if firstName or lastName changed
-      if (req.body.firstName || req.body.lastName) {
-        await User.findByIdAndUpdate(employee.userId, {
-          name: `${employee.firstName} ${employee.lastName}`.trim()
-        });
-      }
-
-      // If updating active status, update linked User as well
-      if (req.body.isActive !== undefined) {
-        await User.findByIdAndUpdate(employee.userId, {
-          isActive: req.body.isActive
-        });
-      }
-
       await employee.save();
+
+      // Build User update payload
+      const userUpdates = {};
+      if (req.body.email) {
+        userUpdates.email = req.body.email.toLowerCase().trim();
+      }
+      if (req.body.firstName || req.body.lastName) {
+        userUpdates.name = `${employee.firstName} ${employee.lastName}`.trim();
+      }
+      if (req.body.isActive !== undefined) {
+        userUpdates.isActive = req.body.isActive;
+      }
+      if (Object.keys(userUpdates).length > 0) {
+        await User.findByIdAndUpdate(employee.userId, userUpdates);
+      }
+
+      // Return with populated userId so the response includes the updated email
+      const updated = await Employee.findById(employee._id)
+        .populate('userId', 'email role isActive')
+        .populate('managerId', 'firstName lastName employeeCode');
+
       return res.status(200).json({
         success: true,
         message: 'Employee updated successfully',
-        data: employee
+        data: updated
       });
+
     } else {
-      // Ordinary employee or manager updating profile
-      // Must be their own profile
+      // ── Employee / Manager: own profile only ────────────────────────────
       if (!req.employee || String(req.employee._id) !== String(employee._id)) {
         return res.status(403).json({
           success: false,
@@ -251,7 +270,7 @@ exports.updateEmployee = async (req, res, next) => {
         });
       }
 
-      // Restricted to permitted personal fields: phone, address, emergencyContact
+      // Restricted to permitted personal fields
       if (req.body.phone !== undefined) employee.phone = req.body.phone;
       if (req.body.address) {
         employee.address = { ...employee.address.toObject(), ...req.body.address };

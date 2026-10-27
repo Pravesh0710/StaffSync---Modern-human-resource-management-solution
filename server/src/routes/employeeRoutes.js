@@ -19,11 +19,17 @@ const createEmployeeValidation = [
   validate
 ];
 
+// Validation rules for updating an employee (HR can optionally change email)
+const updateEmployeeValidation = [
+  body('email').optional().isEmail().withMessage('Valid email is required').normalizeEmail(),
+  validate
+];
+
 // Routes
 router.get('/', authorize('HR', 'MANAGER'), employeeController.getAllEmployees);
 router.post('/', authorize('HR'), createEmployeeValidation, employeeController.createEmployee);
 router.get('/:id', employeeController.getEmployeeById);
-router.put('/:id', employeeController.updateEmployee);
+router.put('/:id', authorize('HR', 'MANAGER', 'EMPLOYEE'), updateEmployeeValidation, employeeController.updateEmployee);
 router.patch('/:id/toggle-status', authorize('HR'), employeeController.toggleEmployeeStatus);
 router.delete('/:id', authorize('HR'), employeeController.deleteEmployee);
 
