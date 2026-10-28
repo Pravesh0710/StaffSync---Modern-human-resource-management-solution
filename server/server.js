@@ -19,6 +19,7 @@ const attendanceRoutes = require('./src/routes/attendanceRoutes');
 const announcementRoutes = require('./src/routes/announcementRoutes');
 const trainingRoutes = require('./src/routes/trainingRoutes');
 const reportRoutes = require('./src/routes/reportRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
 
 const app = express();
 
@@ -29,9 +30,28 @@ if (!isTest) {
 
 // Security & utility middleware
 app.use(helmet());
+
+// CORS configuration supporting single/multiple origins and Vercel preview domains
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map(url => url.trim().replace(/\/$/, ''))
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, server-to-server health checks)
+      if (!origin) return callback(null, true);
+
+      const normalizedOrigin = origin.replace(/\/$/, '');
+      const isAllowed =
+        allowedOrigins.includes(normalizedOrigin) ||
+        /\.vercel\.app$/.test(new URL(origin).hostname); // Auto-allow Vercel previews
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -72,6 +92,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/trainings', trainingRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 Not Found route handler
 app.use((req, res) => {

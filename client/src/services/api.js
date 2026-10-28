@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+// Normalize API URL: supports VITE_API_URL, VITE_API_BASE_URL, or local fallback /api
+const getBaseURL = () => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (!envUrl) return '/api';
+  // If the user provided root domain e.g. "https://staffsync-api.onrender.com", append "/api"
+  const cleanUrl = envUrl.trim().replace(/\/$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json'
   }
@@ -94,6 +103,13 @@ export const reportAPI = {
   getHRMetrics: () => api.get('/reports/hr-metrics'),
   getManagerMetrics: () => api.get('/reports/manager-metrics'),
   getAttendanceReport: (params) => api.get('/reports/attendance-report', { params })
+};
+
+// Notifications API
+export const notificationAPI = {
+  getMyNotifications: () => api.get('/notifications'),
+  markAsRead: (id) => api.patch(`/notifications/${id}/read`),
+  markAllAsRead: () => api.patch('/notifications/read-all')
 };
 
 export default api;

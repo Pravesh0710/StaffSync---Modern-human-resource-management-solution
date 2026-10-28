@@ -1,5 +1,7 @@
 const LeaveRequest = require('../models/LeaveRequest');
 const Employee = require('../models/Employee');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 /**
  * @route   POST /api/leaves
@@ -60,7 +62,52 @@ exports.applyLeave = async (req, res, next) => {
     });
 
     const populatedLeave = await LeaveRequest.findById(leave._id)
-      .populate('employeeId', 'firstName lastName employeeCode department');
+      .populate('employeeId', 'firstName lastName employeeCode department managerId');
+
+    // Send notifications to HR and Manager
+    try {
+      const applicantName = `${req.employee.firstName} ${req.employee.lastName}`.trim();
+      const sDateStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const eDateStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const notificationTitle = `New Leave Request from ${applicantName}`;
+      const notificationMsg = `${applicantName} applied for ${leaveType} leave from ${sDateStr} to ${eDateStr}.`;
+
+      // 1. Find all active HR users
+      const hrUsers = await User.find({ role: 'HR', isActive: true }).select('_id');
+      const notificationsToInsert = hrUsers.map(hr => ({
+        recipient: hr._id,
+        sender: req.user._id,
+        title: notificationTitle,
+        message: notificationMsg,
+        type: 'LEAVE_REQUEST',
+        link: '/hr/leaves'
+      }));
+
+      // 2. Find direct manager user if assigned
+      if (req.employee.managerId) {
+        const managerEmp = await Employee.findById(req.employee.managerId).select('userId');
+        if (managerEmp && managerEmp.userId && String(managerEmp.userId) !== String(req.user._id)) {
+          // Avoid duplicate if the manager also happens to be an HR account
+          const alreadyIncluded = notificationsToInsert.some(n => String(n.recipient) === String(managerEmp.userId));
+          if (!alreadyIncluded) {
+            notificationsToInsert.push({
+              recipient: managerEmp.userId,
+              sender: req.user._id,
+              title: notificationTitle,
+              message: notificationMsg,
+              type: 'LEAVE_REQUEST',
+              link: '/manager/leaves'
+            });
+          }
+        }
+      }
+
+      if (notificationsToInsert.length > 0) {
+        await Notification.insertMany(notificationsToInsert);
+      }
+    } catch (notifErr) {
+      console.error('[Notification Error] Failed to create notifications on leave apply:', notifErr.message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -227,6 +274,22 @@ exports.reviewLeave = async (req, res, next) => {
     leave.reviewComments = reviewComments;
 
     await leave.save();
+
+    // Notify employee about review status
+    try {
+      if (leave.employeeId && leave.employeeId.userId) {
+        await Notification.create({
+          recipient: leave.employeeId.userId,
+          sender: req.user._id,
+          title: `Leave Request ${status === 'APPROVED' ? 'Approved' : 'Rejected'}`,
+          message: `Your ${leave.leaveType} leave request has been ${status.toLowerCase()} by ${req.user.name}.${reviewComments ? ` Comments: "${reviewComments}"` : ''}`,
+          type: 'LEAVE_STATUS',
+          link: '/employee/leaves'
+        });
+      }
+    } catch (notifErr) {
+      console.error('[Notification Error] Failed to notify employee on leave review:', notifErr.message);
+    }
 
     const updated = await LeaveRequest.findById(leave._id)
       .populate('employeeId', 'firstName lastName employeeCode department')
